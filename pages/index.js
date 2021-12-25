@@ -1,8 +1,16 @@
-import Head from 'next/head'
-import Image from 'next/image'
-import styles from '../styles/Home.module.css'
+import Head from "next/head";
+import Image from "next/image";
+import styles from "../styles/Home.module.css";
+import {
+  ApolloClient,
+  InMemoryCache,
+  createHttpLink,
+  gql,
+} from "@apollo/client";
+import { setContext } from "@apollo/client/link/context";
 
-export default function Home() {
+export default function Home({ pinnedItems }) {
+  console.log(pinnedItems);
   return (
     <div className={styles.container}>
       <Head>
@@ -17,38 +25,20 @@ export default function Home() {
         </h1>
 
         <p className={styles.description}>
-          Get started by editing{' '}
+          Get started by editing{" "}
           <code className={styles.code}>pages/index.js</code>
         </p>
 
         <div className={styles.grid}>
-          <a href="https://nextjs.org/docs" className={styles.card}>
-            <h2>Documentation &rarr;</h2>
-            <p>Find in-depth information about Next.js features and API.</p>
-          </a>
-
-          <a href="https://nextjs.org/learn" className={styles.card}>
-            <h2>Learn &rarr;</h2>
-            <p>Learn about Next.js in an interactive course with quizzes!</p>
-          </a>
-
-          <a
-            href="https://github.com/vercel/next.js/tree/master/examples"
-            className={styles.card}
-          >
-            <h2>Examples &rarr;</h2>
-            <p>Discover and deploy boilerplate example Next.js projects.</p>
-          </a>
-
-          <a
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-          >
-            <h2>Deploy &rarr;</h2>
-            <p>
-              Instantly deploy your Next.js site to a public URL with Vercel.
-            </p>
-          </a>
+          {pinnedItems &&
+            pinnedItems.map((item) => {
+              return (
+                <a key={item.id} href={item.url} className={styles.card}>
+                  <h2>{item.name}</h2>
+                  <p>⭐️ {item.stargazersCount}</p>
+                </a>
+              );
+            })}
         </div>
       </main>
 
@@ -58,12 +48,64 @@ export default function Home() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          Powered by{' '}
+          Powered by{" "}
           <span className={styles.logo}>
             <Image src="/vercel.svg" alt="Vercel Logo" width={72} height={16} />
           </span>
         </a>
       </footer>
     </div>
-  )
+  );
+}
+
+export async function getStaticProps() {
+  // const client = new ApolloClient({
+  //   uri: "https://48p1r2roz4.sse.codesandbox.io",
+  //   cache: new InMemoryCache(),
+  // });
+  // したのコードに置き換え
+  const httpLink = createHttpLink({
+    uri: "https://api.github.com/graphql",
+  });
+  const authLink = setContext((_, { headers }) => {
+    return {
+      headers: {
+        ...headers,
+        authorization: `Bearer ${process.env.GITHUB_ACCESS_TOKEN}`,
+      },
+    };
+  });
+
+  const client = new ApolloClient({
+    link: authLink.concat(httpLink),
+    cache: new InMemoryCache(),
+  });
+  const { data } = await client.query({
+    query: gql`
+      {
+        user(login: "kosuke-17") {
+          pinnedItems(first: 6) {
+            totalCount
+            edges {
+              node {
+                ... on Repository {
+                  id
+                  name
+                  url
+                  stargazerCount
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+  });
+
+  const { user } = data;
+  const pinnedItems = user.pinnedItems.edges.map(({ node }) => node);
+
+  return {
+    props: { pinnedItems },
+  };
 }
